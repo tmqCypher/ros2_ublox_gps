@@ -13,11 +13,11 @@ find_package(rosidl_default_generators REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 set(msg_files
-    "msg/CoordinatesMsg.msg"
+    "msg/Coordinates.msg"
 )
 
 set(srv_files
-    "srv/Coordinates.srv"
+
 )
 
 set(action_files

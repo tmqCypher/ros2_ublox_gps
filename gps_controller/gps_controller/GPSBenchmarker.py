@@ -1,5 +1,9 @@
+import os
 import time
 import rclpy
+
+import serial
+from ublox_gps import UbloxGps
 
 from rclpy.node import Node
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
@@ -10,67 +14,76 @@ from gps_interfaces.srv import Coordinates
 
 class GPSBenchmarker(Node):
 
-    def __init__(
-            self,
-            num_calls: int,
-            call_interval: float,
-            executor: Executor
-            ):
+    def __init__(self, executor: Executor):
         super().__init__('gps_benchmarker', parameter_overrides=[])
 
         self.results = []
-        self._num_calls = num_calls
         self._call_counter = 0
-        self._running = True
+
+        num_calls = input('Number of calls to make: ')
+        self._num_calls = int(num_calls) if num_calls.isnumeric() else 100
+        call_interval = input('Call intervals: ')
+        self._call_interval = float(call_interval) if call_interval.isnumeric() else 0.5
 
         self._executor: Executor = executor;
-        self.gps_group = MutuallyExclusiveCallbackGroup()
-        self.timer_group = MutuallyExclusiveCallbackGroup()
+        self._timer_group = MutuallyExclusiveCallbackGroup()
+        self._gps_group = MutuallyExclusiveCallbackGroup()
+        #self._timer_group = ReentrantCallbackGroup()
+        #self._gps_group = ReentrantCallbackGroup()
+        #self._gps_group = self._timer_group
 
-        self._timer = self.create_timer(call_interval, self._timer_callback,
-                callback_group=self.timer_group)
+        self._timer = self.create_timer(self._call_interval, self._timer_callback,
+                callback_group=self._timer_group)
         self._coordinates_client = self.create_client(Coordinates, 'coordinates',
-                callback_group=self.gps_group)
+                callback_group=self._gps_group)
+        self._gps = UbloxGps(serial.Serial('/dev/serial0', baudrate=38400, timeout=1))
+
         self.log = self.get_logger()
-        self.log.info('Initialized')
+        self.log.info(f'Initialized. Testing {self._num_calls} calls at {self._call_interval}s intervals.')
         
+
     def _timer_callback(self):
-
-        start_time = time.time()
-        coords_future = self._coordinates_client.call_async(Coordinates.Request())
-        self._executor.spin_until_future_complete(coords_future)
-        end_time = time.time()
-
         self._call_counter += 1
-        self.results.append((self._call_counter, end_time - start_time))
+        start_time = time.time()
 
-        if self._call_counter == self._num_calls:
+        # Call the /coordinates service
+        #coords = self._coordinates_client.call(Coordinates.Request())
+        #coords_future = self._coordinates_client.call_async(Coordinates.Request())
+        #self._executor.spin_until_future_complete(coords_future)
+
+        # Get the coordinates directly
+        geo = self._gps.geo_coords()
+
+        end_time = time.time()
+        self.results.append((self._call_counter, start_time, end_time))
+
+        #if self._call_counter % 10 == 0:
+        self.log.info(f'Completed call {self._call_counter} of {self._num_calls}')
+
+        if self._call_counter >= self._num_calls:
             self.destroy_timer(self._timer)
-            self.running = False
+
+            output_path = 'data.csv'
+            outfile = open(output_path, mode='w')
+
+            self.log.info(f'Completed all calls. Writing results to {os.path.abspath(output_path)}')
+            for call, start, end in self.results:
+                print(f'{call},{start},{end}', file=outfile)
+            outfile.close()
+
+            self.log.info('Done. Destroying node')
+            self.destroy_node()
 
 
 def main(args=None):
     rclpy.init(args=args)
 
-    NUM_CALLS_PER_TEST = 100
-    CALL_INTERVALS = [0.01, 0.1, 0.5, 1.0, 2.0]
-
     executor = MultiThreadedExecutor()
-    for interval in CALL_INTERVALS:
+    node = GPSBenchmarker(executor)
+    executor.add_node(node)
 
-        print(f'Running test: {NUM_CALLS_PER_TEST} calls, {interval}s intervals')
-        node = GPSBenchmarker(NUM_CALLS_PER_TEST, interval, executor)
-        while node.running:
-            executor.spin_once()
-        test_results = node.results
-        node.destroy_node()
-
-        with open(f'gps_test_{interval}.csv', mode='w') as outfile:
-            for result in test_results:
-                print(f'{result[0]},{result[1]}', file=outfile)
-                
-
-
+    node.get_logger().info('Running')
+    executor.spin()
 
     rclpy.shutdown()
 

@@ -21,7 +21,6 @@ setup(
     entry_points={
         'console_scripts': [
             'gps_controller = gps_controller.GPSController:main',
-            'gps_benchmarker = gps_controller.GPSBenchmarker:main',
         ],
     },
 )

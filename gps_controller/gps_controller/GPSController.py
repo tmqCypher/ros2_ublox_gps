@@ -30,8 +30,8 @@ class GPSController(Node):
 
     def _pub_callback(self):
         geo = self._gps.geo_coords()
-        self.log.debug(f'Publishing coordinates: LAT={geo.lat} \tLON={geo.lon}')
-        return Coordinates(lat=geo.lat, lon=geo.lon)
+        self.log.info(f'{geo.lat=:.7} \t{geo.lon=:.7}')
+        self._coord_pub.publish(Coordinates(lat=geo.lat, lon=geo.lon))
 
 
 def main(args=None):

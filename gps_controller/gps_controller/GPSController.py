@@ -5,7 +5,7 @@ from ublox_gps import UbloxGps
 import rclpy
 from rclpy.node import Node
 
-from gps_interfaces.msg import Coordinates
+from robosub_interfaces.msg import Position
 
 
 class GPSController(Node):
@@ -23,7 +23,7 @@ class GPSController(Node):
             ):
         super().__init__('gps_controller', parameter_overrides=[])
         self._timer = self.create_timer(1.0, self._pub_callback)
-        self._coord_pub = self.create_publisher(Coordinates, 'coordinates', 1)
+        self._coord_pub = self.create_publisher(Position, 'coordinates', 1)
         self._gps = UbloxGps(serial.Serial('/dev/serial0', baudrate=baudrate, timeout=1))
         self.log = self.get_logger()
         self.log.info('Initialized')
@@ -31,7 +31,7 @@ class GPSController(Node):
     def _pub_callback(self):
         geo = self._gps.geo_coords()
         self.log.info(f'{geo.lat=:.7} \t{geo.lon=:.7}')
-        self._coord_pub.publish(Coordinates(lat=geo.lat, lon=geo.lon))
+        self._coord_pub.publish(Position(lat=geo.lat, lon=geo.lon))
 
 
 def main(args=None):
